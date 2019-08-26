@@ -19,9 +19,11 @@ from PIL import Image
 
 return_elements = ["input/input_data:0", "pred_sbbox/concat_2:0", "pred_mbbox/concat_2:0", "pred_lbbox/concat_2:0"]
 pb_file         = "./yolov3_coco.pb"
-image_path      = "./docs/images/road.jpeg"
+#image_path      = "./docs/images/road.jpeg"
+#image_path      = "./docs/images/sample_computer.jpg"
+image_path      = "./docs/images/000000000108.jpg"
 num_classes     = 80
-input_size      = 416
+input_size      = 608
 graph           = tf.Graph()
 
 original_image = cv2.imread(image_path)

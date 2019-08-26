@@ -9,6 +9,9 @@
 #   Created date: 2019-02-28 10:47:03
 #   Description :
 #
+#   Modified by Yue Zhao, 2019-08-08
+#   
+#
 #================================================================
 
 import numpy as np
@@ -45,11 +48,30 @@ class YOLOV3(object):
 
         with tf.variable_scope('pred_lbbox'):
             self.pred_lbbox = self.decode(self.conv_lbbox, self.anchors[2], self.strides[2])
+        
+        # added to build SaveModel for TF serving by YZ 08/18/2019
+        """
+        with tf.variable_scope('pred_multi_scale'):
+            self.pred_multi_scale = tf.concat([tf.reshape(self.pred_sbbox, [-1, 85]),
+                                               tf.reshape(self.pred_mbbox, [-1, 85]),
+                                               tf.reshape(self.pred_lbbox, [-1, 85])], axis=0, name='concat')
+        """
+        # hand-coded the dimensions: if 608, use 19; if 416, use 13
+        with tf.variable_scope('pred_multi_scale'):
+            self.pred_multi_scale = tf.concat([tf.reshape(self.pred_sbbox, [-1, 19, 19, 85]),
+                                               tf.reshape(self.pred_mbbox, [-1, 19, 19, 85]),
+                                               tf.reshape(self.pred_lbbox, [-1, 19, 19, 85])], axis=0, name='concat')
 
     def __build_nework(self, input_data):
-
+        """
+        It is better look at this function with the Yolo_v3_Structure diagram made by Levio
+        One link is here: https://github.com/wizyoung/YOLOv3_TensorFlow
+        """
+        
+        # by YZ, these are the three feature extractions from darknet53, with difference dimension reductions (by 8, 16, 32)
         route_1, route_2, input_data = backbone.darknet53(input_data, self.trainable)
-
+        
+        # input_data is -1*13*13*1024
         input_data = common.convolutional(input_data, (1, 1, 1024,  512), self.trainable, 'conv52')
         input_data = common.convolutional(input_data, (3, 3,  512, 1024), self.trainable, 'conv53')
         input_data = common.convolutional(input_data, (1, 1, 1024,  512), self.trainable, 'conv54')
@@ -61,9 +83,12 @@ class YOLOV3(object):
                                           trainable=self.trainable, name='conv_lbbox', activate=False, bn=False)
 
         input_data = common.convolutional(input_data, (1, 1,  512,  256), self.trainable, 'conv57')
+        
+        # upsampling input data (1/32) to match route_2 (1/16), -1*26*16*512
         input_data = common.upsample(input_data, name='upsample0', method=self.upsample_method)
 
         with tf.variable_scope('route_1'):
+            # route_2 is -1*26*26*256, so input_data is -1*26*26*768
             input_data = tf.concat([input_data, route_2], axis=-1)
 
         input_data = common.convolutional(input_data, (1, 1, 768, 256), self.trainable, 'conv58')
@@ -91,7 +116,8 @@ class YOLOV3(object):
         conv_sobj_branch = common.convolutional(input_data, (3, 3, 128, 256), self.trainable, name='conv_sobj_branch')
         conv_sbbox = common.convolutional(conv_sobj_branch, (1, 1, 256, 3*(self.num_class + 5)),
                                           trainable=self.trainable, name='conv_sbbox', activate=False, bn=False)
-
+        
+        # dimensions are: -1*13*13*255, -1*26*26*255, -1*52*52*255
         return conv_lbbox, conv_mbbox, conv_sbbox
 
     def decode(self, conv_output, anchors, stride):
@@ -103,6 +129,7 @@ class YOLOV3(object):
         conv_shape       = tf.shape(conv_output)
         batch_size       = conv_shape[0]
         output_size      = conv_shape[1]
+        # number of anchors
         anchor_per_scale = len(anchors)
 
         conv_output = tf.reshape(conv_output, (batch_size, output_size, output_size, anchor_per_scale, 5 + self.num_class))
@@ -111,15 +138,19 @@ class YOLOV3(object):
         conv_raw_dwdh = conv_output[:, :, :, :, 2:4]
         conv_raw_conf = conv_output[:, :, :, :, 4:5]
         conv_raw_prob = conv_output[:, :, :, :, 5: ]
-
+        
+        # tf.tile creates a new tensor by replicating input m time
         y = tf.tile(tf.range(output_size, dtype=tf.int32)[:, tf.newaxis], [1, output_size])
         x = tf.tile(tf.range(output_size, dtype=tf.int32)[tf.newaxis, :], [output_size, 1])
 
         xy_grid = tf.concat([x[:, :, tf.newaxis], y[:, :, tf.newaxis]], axis=-1)
         xy_grid = tf.tile(xy_grid[tf.newaxis, :, :, tf.newaxis, :], [batch_size, 1, 1, anchor_per_scale, 1])
         xy_grid = tf.cast(xy_grid, tf.float32)
-
+        
+        # tf.sigmoid(dxdy) gives the relative position within a grid cell. Adding the position of the cell (xy_grid)
+        # multiplying stride scales the relative positions to the original image
         pred_xy = (tf.sigmoid(conv_raw_dxdy) + xy_grid) * stride
+        # tf.exp() scales the anchors larger or smaller or changes the shape
         pred_wh = (tf.exp(conv_raw_dwdh) * anchors) * stride
         pred_xywh = tf.concat([pred_xy, pred_wh], axis=-1)
 
@@ -189,24 +220,31 @@ class YOLOV3(object):
         batch_size  = conv_shape[0]
         output_size = conv_shape[1]
         input_size  = stride * output_size
+        # conv is reshaped here to 5 dimensions
         conv = tf.reshape(conv, (batch_size, output_size, output_size,
                                  self.anchor_per_scale, 5 + self.num_class))
+        # this is the logit before going into sigmoid functions
         conv_raw_conf = conv[:, :, :, :, 4:5]
         conv_raw_prob = conv[:, :, :, :, 5:]
-
+        
         pred_xywh     = pred[:, :, :, :, 0:4]
         pred_conf     = pred[:, :, :, :, 4:5]
-
+        
+        # true coordinates (x, y, w, h)
         label_xywh    = label[:, :, :, :, 0:4]
+        # what is this?
         respond_bbox  = label[:, :, :, :, 4:5]
+        # true probabilities
         label_prob    = label[:, :, :, :, 5:]
-
+        
+        # label_xywh and pred_xywh are used to compute giou
         giou = tf.expand_dims(self.bbox_giou(pred_xywh, label_xywh), axis=-1)
         input_size = tf.cast(input_size, tf.float32)
 
         bbox_loss_scale = 2.0 - 1.0 * label_xywh[:, :, :, :, 2:3] * label_xywh[:, :, :, :, 3:4] / (input_size ** 2)
         giou_loss = respond_bbox * bbox_loss_scale * (1- giou)
-
+        
+        # bboxes (true_bboxes) and pred_xywh are used to compute iou
         iou = self.bbox_iou(pred_xywh[:, :, :, :, np.newaxis, :], bboxes[:, np.newaxis, np.newaxis, np.newaxis, :, :])
         max_iou = tf.expand_dims(tf.reduce_max(iou, axis=-1), axis=-1)
 
@@ -219,7 +257,8 @@ class YOLOV3(object):
                 +
                 respond_bgd * tf.nn.sigmoid_cross_entropy_with_logits(labels=respond_bbox, logits=conv_raw_conf)
         )
-
+        
+        # cross-entropy for classifications
         prob_loss = respond_bbox * tf.nn.sigmoid_cross_entropy_with_logits(labels=label_prob, logits=conv_raw_prob)
 
         giou_loss = tf.reduce_mean(tf.reduce_sum(giou_loss, axis=[1,2,3,4]))

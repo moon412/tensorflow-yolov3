@@ -137,7 +137,8 @@ class YoloTrain(object):
                 train_op = self.train_op_with_frozen_variables
             else:
                 train_op = self.train_op_with_all_variables
-
+            
+            # tqdm is a visualization tool that displays an Iterable object in a progree bar
             pbar = tqdm(self.trainset)
             train_epoch_loss, test_epoch_loss = [], []
 

@@ -136,6 +136,7 @@ def nms(bboxes, iou_threshold, sigma=0.3, method='nms'):
     Note: soft-nms, https://arxiv.org/pdf/1704.04503.pdf
           https://github.com/bharatsingh430/soft-nms
     """
+    # all the classes from bboxes
     classes_in_img = list(set(bboxes[:, 5]))
     best_bboxes = []
 
@@ -147,6 +148,7 @@ def nms(bboxes, iou_threshold, sigma=0.3, method='nms'):
             max_ind = np.argmax(cls_bboxes[:, 4])
             best_bbox = cls_bboxes[max_ind]
             best_bboxes.append(best_bbox)
+            # find the best bbox with the max score for one class and remove it from 
             cls_bboxes = np.concatenate([cls_bboxes[: max_ind], cls_bboxes[max_ind + 1:]])
             iou = bboxes_iou(best_bbox[np.newaxis, :4], cls_bboxes[:, :4])
             weight = np.ones((len(iou),), dtype=np.float32)
@@ -154,6 +156,9 @@ def nms(bboxes, iou_threshold, sigma=0.3, method='nms'):
             assert method in ['nms', 'soft-nms']
 
             if method == 'nms':
+                # remove the bboxes that overlap with the best bbox beyond the threshold
+                # this removes the duplicate bboxes generated for the same object
+                # there may be bboxes with high score for the same type of object in the image
                 iou_mask = iou > iou_threshold
                 weight[iou_mask] = 0.0
 

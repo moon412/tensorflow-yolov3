@@ -8,6 +8,7 @@
 #   Author      : YunYang1994
 #   Created date: 2019-02-28 13:51:31
 #   Description :
+#   Modified by YueZhao 08192019, change 416 to 608
 #
 #================================================================
 
@@ -45,7 +46,8 @@ tf.reset_default_graph()
 cur_weights_mess = []
 tf.Graph().as_default()
 with tf.name_scope('input'):
-    input_data = tf.placeholder(dtype=tf.float32, shape=(1, 416, 416, 3), name='input_data')
+    # 608 can be changed to 416
+    input_data = tf.placeholder(dtype=tf.float32, shape=(1, 608, 608, 3), name='input_data')
     training = tf.placeholder(dtype=tf.bool, name='trainable')
 model = YOLOV3(input_data, training)
 for var in tf.global_variables():
@@ -88,6 +90,8 @@ with tf.Session() as sess:
     print('=> Restoring weights from:\t %s' % org_weights_path)
     load.restore(sess, org_weights_path)
     save.save(sess, cur_weights_path)
+    
+    
 tf.reset_default_graph()
 
 

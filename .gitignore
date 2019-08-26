@@ -6,6 +6,11 @@ bin-release/
 
 # Other files and folders
 .settings/
+checkpoint/
+mnist_data/
+savemodel/
+VOC/
+*.pb
 
 # Executables
 *.swf

@@ -76,6 +76,7 @@ def upsample(input_data, name, method="deconv"):
     if method == "resize":
         with tf.variable_scope(name):
             input_shape = tf.shape(input_data)
+            # resize images to size using nearest neighbor interpolation
             output = tf.image.resize_nearest_neighbor(input_data, (input_shape[1] * 2, input_shape[2] * 2))
 
     if method == "deconv":
