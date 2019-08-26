@@ -10,6 +10,7 @@ checkpoint/
 mnist_data/
 savemodel/
 VOC/
+docs/images/.DS_Store/
 *.pb
 
 # Executables
