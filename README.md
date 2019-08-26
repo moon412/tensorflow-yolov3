@@ -21,10 +21,17 @@ $ python freeze_graph.py
 $ python image_demo.py
 $ python video_demo.py # if use camera, set video_path = 0
 ```
-4. Load the checkpoint file and export the SaveModel format for TensorFlow serving
+4. Load the checkpoint file and export the SaveModel object to the `savemodel` folder for TensorFlow serving
 ```bashrc
 $ python save_model.py
 ```
+
+5. Copy the `yolov3` folder to `tmp` and serve the model as a RESTful API with [TF serving](https://www.tensorflow.org/tfx/serving/setup)
+```
+$ docker run -p 8501:8501 --mount type=bind,source=/tmp/yolov3/,target=/models/yolov3 -e MODEL_NAME=yolov3 -t tensorflow/serving &
+```
+Look at [test_tf_serving.ipynb](https://github.com/moon412/tensorflow-yolov3/blob/master/test_tf_serving_api.ipynb) for details to serve and test the model. 
+To serve the model, I added one variable `pred_multi_scale` to [class YOLOV3](https://github.com/moon412/tensorflow-yolov3/blob/master/core/yolov3.py#L60). This variable concatenates the tensors from the three scales (`pred_sbbox`, `pred_mbbox` and `pred_lbbox`) into one single tensor. Because, as far as I know, TF serving only outputs one single tensor. This is quite hacky (you may notice the dimensions are hard-coded for 606 * 608 * 3 images) but it works for now. 
 
 ## Part 2. Training
 ### 2.1 Two files are required as follows:
